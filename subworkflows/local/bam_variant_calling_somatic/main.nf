@@ -37,9 +37,7 @@ workflow BAM_VARIANT_CALLING_SOMATIC {
         cram.dump(tag:"sage_cram")
         BAM_VARIANT_CALLING_SOMATIC_SAGE(
             cram,
-            // Remap channel to match module/subworkflow
             dict,
-            // Remap channel to match module/subworkflow
             fasta,
             // Remap channel to match module/subworkflow
             fasta_fai.map{ it -> [ [ id:'fasta_fai' ], it ] },
@@ -72,7 +70,6 @@ workflow BAM_VARIANT_CALLING_SOMATIC {
 
         BAM_VARIANT_CALLING_SOMATIC_STRELKA(
             cram_strelka,
-            // Remap channel to match module/subworkflow
             dict,
             fasta,
             fasta_fai,
@@ -88,9 +85,7 @@ workflow BAM_VARIANT_CALLING_SOMATIC {
     if (tools && tools.split(',').contains('mutect2') || realignment) {
         mutect_cram = cram.map { meta, normal_cram, normal_crai, tumor_cram, tumor_crai -> [ meta, [ normal_cram, tumor_cram ], [ normal_crai, tumor_crai ] ] }
         BAM_VARIANT_CALLING_SOMATIC_MUTECT2(
-            // Remap channel to match module/subworkflow
             mutect_cram,
-            // Remap channel to match module/subworkflow
             fasta,
             // Remap channel to match module/subworkflow
             fasta_fai.map{ it -> [ [ id:'fasta_fai' ], it ] },

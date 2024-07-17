@@ -1,5 +1,5 @@
 - name: Run VEP
-  command: nextflow run main.nf -profile test,docker --tools vep --skip_tools 'multiqc'
+  command: nextflow run main.nf -profile test,docker --tools vep --skip_tools 'multiqc' --step annotation
   tags:
     - annotation
     - vep

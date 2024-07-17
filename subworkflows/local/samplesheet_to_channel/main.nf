@@ -169,7 +169,7 @@ workflow  SAMPLESHEET_TO_CHANNEL{
                 if (params.tools.split(',').contains(tool_requiring_normal_samples)) requested_tools_requiring_normal_samples.add(tool_requiring_normal_samples)
             }
             if (!requested_tools_requiring_normal_samples.isEmpty()) {
-                error('The sample-sheet only contains tumor-samples, but the following tools, which were requested by the option "tools", expect at least one normal-sample at the moment: ' + requested_tools_requiring_normal_samples.join(", "))
+                log.warn('The sample-sheet only contains tumor-samples, but the following tools, which were requested by the option "--tools", work better with a matched normal-sample: ' + requested_tools_requiring_normal_samples.join(", "))
             }
         }
     }

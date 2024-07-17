@@ -178,9 +178,9 @@ workflow RNADNAVAR {
         false,  // is second run
         params.no_intervals
     )
-    filtered_maf = BAM_PROCESSING.out.maf
-    multiqc_files      = multiqc_files.mix(BAM_PROCESSING.out.reports)
-    versions     = versions.mix(BAM_PROCESSING.out.versions)
+    filtered_maf   = BAM_PROCESSING.out.maf
+    multiqc_files  = multiqc_files.mix(BAM_PROCESSING.out.reports)
+    versions       = versions.mix(BAM_PROCESSING.out.versions)
     if (params.tools && params.tools.split(',').contains('realignment')) {
         // fastq will not be split when realignment
         params.split_fastq = 0
@@ -229,7 +229,7 @@ workflow RNADNAVAR {
             true   // no_intervals
             )
 
-        multiqc_files                = multiqc_files.mix(REALIGNMENT.out.reports)
+        multiqc_files          = multiqc_files.mix(REALIGNMENT.out.reports)
         versions               = versions.mix(REALIGNMENT.out.versions)
         realigned_filtered_maf = REALIGNMENT.out.maf
     } else{
@@ -265,7 +265,6 @@ workflow RNADNAVAR {
         methods_description = methodsDescriptionText(ch_multiqc_custom_methods_description)
         methods_description = Channel.value(methods_description)
 
-        multiqc_files = Channel.empty()
         multiqc_files = multiqc_files.mix(version_yaml)
         multiqc_files = multiqc_files.mix(workflow_summary.collectFile(name: 'workflow_summary_mqc.yaml'))
         multiqc_files = multiqc_files.mix(methods_description.collectFile(name: 'methods_description_mqc.yaml'))

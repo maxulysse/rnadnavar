@@ -1,0 +1,3 @@
+patient,status,sample,cram,crai
+TCRBOA7,1,sample_dna,https://raw.githubusercontent.com/nf-core/test-datasets/rnadnavar/data/tcrb/cram/TCRBOA7-T.chr7.recal.cram,https://raw.githubusercontent.com/nf-core/test-datasets/rnadnavar/data/tcrb//cram/TCRBOA7-T.chr7.recal.cram.crai
+TCRBOA7,2,sample_rna,https://raw.githubusercontent.com/nf-core/test-datasets/rnadnavar/data/tcrb//cram/TCRBOA7-T-RNA.chr7.recal.cram,https://raw.githubusercontent.com/nf-core/test-datasets/rnadnavar/data/tcrb//cram/TCRBOA7-T-RNA.chr7.recal.cram.crai

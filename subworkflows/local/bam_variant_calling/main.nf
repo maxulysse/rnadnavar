@@ -5,6 +5,8 @@
 // A when clause condition is defined in the conf/modules.config to determine if the module should be run
 // Variant calling on tumor/normal pair
 include { BAM_VARIANT_CALLING_SOMATIC                 } from '../bam_variant_calling_somatic/main'
+// Variant calling on tumor only
+include { BAM_VARIANT_CALLING_TUMOR_ONLY_ALL          } from '../bam_variant_calling_tumor_only_all/main'
 // QC on VCF files
 include { VCF_QC_BCFTOOLS_VCFTOOLS                    } from '../vcf_qc_bcftools_vcftools/main'
 // Create samplesheet to restart from different steps
@@ -73,23 +75,11 @@ workflow BAM_VARIANT_CALLING {
 
             // 4. Transpose [ patient1, [ meta1, meta2 ], [ cram1, crai1, cram2, crai2 ] ] back to [ patient1, meta1, [ cram1, crai1 ], null ] [ patient1, meta2, [ cram2, crai2 ], null ]
             // and remove patient ID field & null value for further processing [ meta1, [ cram1, crai1 ] ] [ meta2, [ cram2, crai2 ] ]
-            cram_variant_calling_tumor_only = cram_variant_calling_tumor_filtered.transpose().map{ it -> [it[1], it[2], it[3]] }
+            cram_variant_calling_tumor_only = cram_variant_calling_tumor_filtered.transpose().map{ it -> [it[1] + [tumor_id: it[1].sample], it[2], it[3]] }
+            cram_variant_calling_tumor_only.dump(tag:'cram_variant_calling_tumor_only')
 
-            only_paired_variant_calling = true // for now only this supported
-            if (only_paired_variant_calling) {
-                // Normal only samples
+            cram_variant_calling_status_normal = cram_variant_calling_status.normal
 
-                // 1. Join with tumor samples, in each channel there is one key per patient now. Patients without matched tumor end up with: [ patient1, [ meta1 ], [ cram1, crai1 ], null ] as there is only one matched normal possible
-                cram_variant_calling_normal_joined = cram_variant_calling_normal_to_cross.join(cram_variant_calling_tumor_grouped, failOnDuplicate: true, remainder: true)
-
-                // 2. Filter out entries with last entry null
-                cram_variant_calling_normal_filtered = cram_variant_calling_normal_joined.filter{ it ->  !(it.last()) }
-
-                // 3. Remove patient ID field & null value for further processing [ meta1, [ cram1, crai1 ] ] [ meta2, [ cram2, crai2 ] ] (no transposing needed since only one normal per patient ID)
-                cram_variant_calling_status_normal = cram_variant_calling_normal_filtered.map{ it -> [it[1], it[2], it[3]] }
-            } else {
-                cram_variant_calling_status_normal = cram_variant_calling_status.normal
-            }
 
             // Tumor - normal pairs
             // Use cross to combine normal with all tumor samples, i.e. multi tumor samples from recurrences
@@ -128,15 +118,36 @@ workflow BAM_VARIANT_CALLING {
                 no_intervals
                 )
 
+            // TUMOR ONLY VARIANT CALLING
+            BAM_VARIANT_CALLING_TUMOR_ONLY_ALL(
+                tools,
+                cram_variant_calling_tumor_only,
+                dict,
+                fasta,
+                fasta_fai,
+                germline_resource,
+                germline_resource_tbi,
+                intervals,
+                intervals_bed_gz_tbi,
+                intervals_bed_combined,
+                intervals_bed_gz_tbi_combined,
+                pon,
+                pon_tbi,
+                params.joint_mutect2,
+                realignment,
+                no_intervals
+            )
+
 
             // Gather vcf files for annotation and QC
-            vcf_to_normalise            = Channel.empty().mix(BAM_VARIANT_CALLING_SOMATIC.out.vcf_all)
-            contamination_table_mutect2 = Channel.empty().mix(BAM_VARIANT_CALLING_SOMATIC.out.contamination_table_mutect2)
-            segmentation_table_mutect2  = Channel.empty().mix(BAM_VARIANT_CALLING_SOMATIC.out.segmentation_table_mutect2)
-            artifact_priors_mutect2     = Channel.empty().mix(BAM_VARIANT_CALLING_SOMATIC.out.artifact_priors_mutect2)
+            vcf_to_normalise            = Channel.empty().mix(BAM_VARIANT_CALLING_SOMATIC.out.vcf_all).mix(BAM_VARIANT_CALLING_TUMOR_ONLY_ALL.out.vcf_all)
+            contamination_table_mutect2 = Channel.empty().mix(BAM_VARIANT_CALLING_SOMATIC.out.contamination_table_mutect2).mix(BAM_VARIANT_CALLING_TUMOR_ONLY_ALL.out.contamination_table_mutect2)
+            segmentation_table_mutect2  = Channel.empty().mix(BAM_VARIANT_CALLING_SOMATIC.out.segmentation_table_mutect2).mix(BAM_VARIANT_CALLING_TUMOR_ONLY_ALL.out.segmentation_table_mutect2)
+            artifact_priors_mutect2     = Channel.empty().mix(BAM_VARIANT_CALLING_SOMATIC.out.artifact_priors_mutect2).mix(BAM_VARIANT_CALLING_TUMOR_ONLY_ALL.out.artifact_priors_mutect2)
 
             // Gather used variant calling softwares versions
             versions = versions.mix(BAM_VARIANT_CALLING_SOMATIC.out.versions)
+            versions = versions.mix(BAM_VARIANT_CALLING_TUMOR_ONLY_ALL.out.versions)
 
             CHANNEL_VARIANT_CALLING_CREATE_CSV(vcf_to_normalise, "variantcalled")
         }
