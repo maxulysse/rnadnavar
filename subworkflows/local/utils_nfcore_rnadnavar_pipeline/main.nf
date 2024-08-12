@@ -275,7 +275,7 @@ def methodsDescriptionText(mqc_methods_yaml) {
 }
 
 //
-// nf-core/sarek logo
+// nf-core/rnadnavar logo
 //
 def nfCoreLogo(monochrome_logs=true) {
     Map colors = logColours(monochrome_logs)
