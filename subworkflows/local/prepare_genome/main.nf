@@ -90,7 +90,7 @@ workflow PREPARE_GENOME {
     //
     // Uncompress GTF annotation file or create from GFF3 if required
     //
-    if (params.rna){
+    if (params.rna & params.step == 'mapping'){
         ch_gffread_version = Channel.empty()
         if (params.gtf) {
             if (params.gtf.endsWith('.gz')) {
@@ -120,24 +120,6 @@ workflow PREPARE_GENOME {
             .set { ch_gtf }
 
             versions = versions.mix(GFFREAD.out.versions)
-        }
-
-        //
-        // Uncompress exon BED annotation file or create from GTF if required
-        //
-        if (params.exon_bed) {
-            if (params.exon_bed.endsWith('.gz')) {
-                GUNZIP_GENE_BED (
-                    Channel.fromPath(params.exon_bed).map{ it -> [[id:it[0].baseName], it] }
-                )
-                ch_gene_bed = GUNZIP_GENE_BED.out.gunzip.map{ meta, bed -> [bed] }.collect()
-                versions = versions.mix(GUNZIP_GENE_BED.out.versions)
-            } else {
-                ch_exon_bed = Channel.fromPath(params.exon_bed).collect()
-            }
-        } else {
-            ch_exon_bed = GTF2BED ( ch_gtf ).bed.collect()
-            versions = versions.mix(GTF2BED.out.versions)
         }
 
         //
@@ -218,7 +200,6 @@ workflow PREPARE_GENOME {
         pon_tbi               = TABIX_PON.out.tbi.map{ meta, tbi -> [tbi] }.collect()                 // path: pon.vcf.gz.tbi
         star_index            = ch_star_index                                                         // path: star/index/
         gtf                   = ch_gtf                                                                // path: genome.gtf
-        exon_bed              = ch_exon_bed                                                           // path: exon.bed
         hisat2_index          = ch_hisat2_index                                                       // path: hisat2/index/
         splicesites           = ch_splicesites                                                        // path: genome.splicesites.txt
         versions              = versions                                                              // channel: [ versions.yml ]
