@@ -69,24 +69,30 @@ workflow BAM_EXTRACT_READS_HISAT2_ALIGN {
                                         }
                 maf_with_candidates_branch.realign.dump(tag:'maf_with_candidates0')
                 // map and change ids with _realign tag to differentiate from first alignment
-                maf_with_candidates_tumor = maf_with_candidates_branch.realign.map{
-                                        meta, maf ->
-                                        [[
-                                        patient: meta.patient,
-                                        sample:  meta.id.split('_vs_')[0].split('_with_')[0] + "_realign",
-                                        status:  meta.status,
-                                        id:      meta.id.split('_vs_')[0].split('_with_')[0] + "_realign"
-                                        ], maf]
-                                        }
-                maf_with_candidates_normal = maf_with_candidates_branch.realign.map{
-                                        meta, maf ->
-                                        [[
-                                        patient: meta.patient,
-                                        sample:  meta.id.split('_vs_')[1].split('_with_')[0] + "_realign",
-                                        status:  0,
-                                        id:      meta.id.split('_vs_')[1].split('_with_')[0] + "_realign"
-                                        ], maf]
-                                        }
+                maf_with_candidates_tumor = maf_with_candidates_branch.realign.map { meta, maf ->
+                                                                                        def base_id = meta.id.contains('_vs_') ? meta.id.split('_vs_')[0].split('_with_')[0] : meta.id.split('_with_')[0]
+                                                                                        def sample_id = base_id + "_realign"
+                                                                                        [
+                                                                                            [
+                                                                                                patient: meta.patient,
+                                                                                                sample:  sample_id,
+                                                                                                status:  meta.status,
+                                                                                                id:      sample_id
+                                                                                            ], maf
+                                                                                        ]
+                                                                                    }
+                maf_with_candidates_normal = maf_with_candidates_branch.realign.map{ meta, maf ->
+                                                                                        def base_id = meta.id.contains('_vs_') ? meta.id.split('_vs_')[1].split('_with_')[0] : meta.id.split('_with_')[0]
+                                                                                        def sample_id = base_id + "_realign"
+                                                                                        [
+                                                                                            [
+                                                                                                patient: meta.patient,
+                                                                                                sample:  sample_id,
+                                                                                                status:  0,
+                                                                                                id:      sample_id
+                                                                                            ], maf
+                                                                                        ]
+                                                                                    }
                 maf_with_candidates_to_realign = maf_with_candidates_tumor.mix(maf_with_candidates_normal)
                 reads_to_realign_and_join = reads_to_realign_branch.realign.map{meta, cram, crai ->
                                         [[patient: meta.patient,
