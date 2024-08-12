@@ -2,11 +2,11 @@ process RUN_CONSENSUS {
     tag "$meta.id"
     label 'process_low'
 
-    conda "bioconda::bioconductor-rtracklayer bioconda::bioconductor-complexheatmap conda-forge::r-ggrepel conda-forge::r-data.table conda-forge::r-dplyr conda-forge::ggpubr "
+    conda "bioconda::bioconductor-rtracklayer bioconda::bioconductor-complexheatmap conda-forge::r-ggrepel conda-forge::r-data.table conda-forge::r-dplyr conda-forge::ggpubr"
     container 'ghcr.io/raqmanzano/renv:latest'
 
     input:
-        tuple val(meta), path(vcf, stageAs: "inputs/*"), val(caller)
+        tuple val(meta), path(input_file, stageAs: "inputs/*"), val(caller), path(intervals)
 
     output:
         tuple val(meta), path('*.consensus.vcf')                , optional:true , emit: vcf
@@ -19,12 +19,20 @@ process RUN_CONSENSUS {
     when:
         task.ext.when == null || task.ext.when
 
-    script: // This script is bundled with the pipeline, in nf-core/rnadnavar/bin/
+    script:
         def args = task.ext.args ?: ''
         def prefix = task.ext.prefix ?: "${meta.id}"
 
         """
-        run_consensus.R --input_dir=inputs/ --out_prefix=${prefix}.consensus --cpu=$task.cpus $args
+        if [ -n "${intervals}" ]; then
+            INTER=\$(awk '{print \$1 ":" \$2 "-" \$3}' ${intervals})
+            interval="--interval=\$INTER"
+        else
+            interval=""
+        fi
+
+        run_consensus.R --input_dir=inputs/ --out_prefix=${prefix}.consensus --cpu=$task.cpus $args \$interval
+
         cat <<-END_VERSIONS > versions.yml
         "${task.process}":
             R: \$(echo \$(R --version 2>&1) | head -n 1)

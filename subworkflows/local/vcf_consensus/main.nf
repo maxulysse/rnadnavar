@@ -6,6 +6,7 @@
 include { VCF2MAF                                  } from '../../../modules/local/vcf2maf/vcf2maf/main'
 include { RUN_CONSENSUS                            } from '../../../modules/local/consensus/main'
 include { RUN_CONSENSUS as RUN_CONSENSUS_RESCUE    } from '../../../modules/local/consensus/main'
+include { MERGE_MAF                                } from '../../../modules/local/merge_maf/main'
 // Create samplesheets to restart from consensus
 include { CHANNEL_CONSENSUS_CREATE_CSV                 } from '../channel_consensus_create_csv/main'
 include { CHANNEL_CONSENSUS_CREATE_CSV as CHANNEL_RESCUE_CREATE_CSV                 } from '../channel_consensus_create_csv/main'
@@ -15,10 +16,11 @@ workflow VCF_CONSENSUS {
     tools
     vcf_to_consensus
     fasta
+    intervals                   // [ intervals, num_intervals ] or [ [], 0 ] if no intervals
     previous_maf_consensus_dna  // results already done to avoid a second run when rna filterig
     previous_mafs_status_dna    // results already done to avoid a second run when rna filterig
     input_sample
-    realignment
+    realignment                 // bool
 
     main:
     versions                = Channel.empty()
@@ -29,7 +31,7 @@ workflow VCF_CONSENSUS {
 
     if (params.step == 'consensus' && !realignment) vcf_to_consensus = input_sample
 
-
+    vcf_to_consensus.dump(tag:'vcf_to_consensus_from_input')
     if ((params.step in ['mapping', 'markduplicates', 'splitncigar',
                         'prepare_recalibration', 'recalibrate', 'variant_calling', 'annotate',
                         'norm', 'consensus'] &&
@@ -45,7 +47,7 @@ workflow VCF_CONSENSUS {
         maf_to_consensus = VCF2MAF.out.maf.mix(vcf_to_consensus_type.maf)
         versions         = versions.mix(VCF2MAF.out.versions)
 
-//        maf_to_consensus.dump(tag:"maf_to_consensus")
+        maf_to_consensus.dump(tag:"maf_to_consensus")
         // count number of callers to generate groupKey
         if (realignment || (params.step in ['consensus', 'annotate','filtering', 'rna_filtering'] && params.tools && params.tools.split(',').contains("realignment")) ) {
             tools = "sage,strelka,mutect2" // TODO: this is hardcoded at the moment. Should be a param
@@ -61,10 +63,62 @@ workflow VCF_CONSENSUS {
                                     [key, maf, meta.variantcaller]}
                                     .groupTuple()
         maf_to_consensus.dump(tag:"maf_to_consensus1")
-        // Run consensus on VCF with same id
-        RUN_CONSENSUS ( maf_to_consensus )
 
-        consensus_maf = RUN_CONSENSUS.out.maf  // 1 consensus_maf from all callers
+
+        maf_intervals = maf_to_consensus.combine(intervals)
+        // Move num_intervals to meta map and reorganize channel for CONSENSUS module
+        .map{ meta, maf, variantcaller, intervals, num_intervals -> [ meta + [ num_intervals:num_intervals ], maf, variantcaller, intervals ]}
+        maf_intervals.dump(tag:'maf_intervals_consensus')
+        // Run consensus on VCF with same id
+        RUN_CONSENSUS ( maf_intervals )
+
+        RUN_CONSENSUS.out.maf.dump(tag:'RUN_CONSENSUS.out.maf')
+        RUN_CONSENSUS.out.maf_separate.dump(tag:'RUN_CONSENSUS.out.maf_separate')
+
+        run_consensus_out = RUN_CONSENSUS.out.maf.branch{
+        // Use meta.num_intervals to asses number of intervals
+        intervals:    it[0].num_intervals > 1
+        no_intervals: it[0].num_intervals <= 1
+        }
+
+        run_consensus_out_per_caller = RUN_CONSENSUS.out.maf_separate.branch{
+        // Use meta.num_intervals to asses number of intervals
+        intervals:    it[0].num_intervals > 1
+        no_intervals: it[0].num_intervals <= 1
+        }
+
+        run_consensus_out_per_caller.intervals.dump(tag:'run_consensus_out_per_caller.intervals')
+
+        // Merge if intervals
+        consensus_maf_to_merge = run_consensus_out.intervals.map{ meta, maf ->
+                                                                    [ groupKey(meta, meta.num_intervals), maf ]}.groupTuple()
+
+        // Step 1: Separate the mafFiles and variantCallers, while keeping the meta constant
+        consensus_maf_per_caller_to_merge = run_consensus_out_per_caller.intervals.flatMap { meta, mafFiles, variantCallers ->
+                                                                                    // Pair each MAF file with the corresponding variant caller
+                                                                                    mafFiles.collect { mafFile -> [meta, mafFile]}
+                                                                        }.map { meta, filePath ->
+                                                                            // Use regex to extract the caller name (pattern) from the file path
+                                                                            def matcher = (filePath =~ /consensus_(\w+)\.maf$/)
+                                                                            def callerName = matcher ? matcher[0][1] : null
+
+                                                                            // Update the meta information with the correct caller name
+                                                                            def updatedMeta = meta.clone()
+                                                                            updatedMeta.callername = callerName
+
+                                                                            // Return the updated meta and the original file path
+                                                                            [groupKey(updatedMeta, meta.num_intervals), filePath]
+
+                                                                        }.groupTuple()
+
+
+
+        consensus_maf_to_merge.dump(tag:'consensus_maf_to_merge')
+        consensus_maf_per_caller_to_merge.dump(tag:'consensus_maf_per_caller_to_merge')
+        // consensus_maf_per_caller_to_merge.map {meta, maf, dummy, dmmy2 -> dummy}
+        MERGE_MAF(consensus_maf_to_merge)
+
+        consensus_maf = run_consensus_out.no_intervals.mix(MERGE_MAF.out.maf_out)  // 1 consensus_maf from all callers
         consensus_maf.dump(tag:"consensus_maf0")
         // Separate DNA from RNA
         // VCFs from variant calling
