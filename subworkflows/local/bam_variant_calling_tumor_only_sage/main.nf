@@ -43,6 +43,9 @@ workflow BAM_VARIANT_CALLING_TUMOR_ONLY_SAGE {
         // Move num_intervals to meta map and reorganize channel for SAGE module
         .map{ meta, cram, crai, intervals, num_intervals -> [ meta + [ num_intervals:num_intervals ], [], [], cram, crai, intervals ]}
     cram_intervals.dump(tag:'cram_intervals_sage')
+    fasta.dump(tag:'sage_fasta')
+    fasta_fai.dump(tag:'sage_fasta_fai')
+    sage_ensembl.dump(tag:'sage_ensembl')
     SAGE(
         cram_intervals,
         sage_ensembl,

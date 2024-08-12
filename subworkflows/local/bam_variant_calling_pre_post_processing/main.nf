@@ -97,7 +97,8 @@ workflow BAM_VARIANT_CALLING_PRE_POST_PROCESSING {
     versions                      = versions.mix(BAM_VARIANT_CALLING.out.versions)
     reports                       = reports.mix(BAM_VARIANT_CALLING.out.reports)
 
-
+    cram_variant_calling_pair.dump(tag:'cram_variant_calling_pair')
+    vcf_to_normalise.dump(tag:'vcf_to_normalise')
     // NORMALISE
     VCF_NORMALISE (
                     vcf_to_normalise,
@@ -130,8 +131,9 @@ workflow BAM_VARIANT_CALLING_PRE_POST_PROCESSING {
             params.tools,
             vcf_to_consensus,
             fasta,
-            dna_consensus_maf, // null when first pass
-            dna_varcall_mafs,  // null when first pass
+            intervals,
+            dna_consensus_maf, // null when no realignment mode
+            dna_varcall_mafs,  // null when no realignment mode
             input_sample,
             realignment
             )
@@ -143,7 +145,7 @@ workflow BAM_VARIANT_CALLING_PRE_POST_PROCESSING {
 
     maf_to_filter.dump(tag:"maf_to_filter0")
     // STEP 7: FILTERING
-    MAF_FILTERING(maf_to_filter, fasta, input_sample, realignment)
+    MAF_FILTERING(maf_to_filter, fasta, intervals, input_sample, realignment)
     filtered_maf = MAF_FILTERING.out.maf
     versions     = versions.mix(MAF_FILTERING.out.versions)
 

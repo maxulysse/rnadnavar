@@ -30,15 +30,24 @@ workflow BAM_SPLITNCIGARREADS {
         dict.map{ meta, it ->  it  }
     )
 
-    // Gather the recalibrated cram files
-    cram_to_merge = GATK4_SPLITNCIGARREADS.out.cram.map{ meta, cram -> [ groupKey(meta, meta.num_intervals), cram ] }.groupTuple()
+    // Only merge and index if no_intervals == false
+    if (!params.no_intervals) {
 
-    // Merge and index the recalibrated cram files
-    CRAM_MERGE_INDEX_SAMTOOLS(cram_to_merge, fasta, fasta_fai)
+        // Gather the splitncigar cram files
+        cram_to_merge = GATK4_SPLITNCIGARREADS.out.cram.map{ meta, cram -> [ groupKey(meta, meta.num_intervals), cram ] }.groupTuple()
 
-    cram_recal = CRAM_MERGE_INDEX_SAMTOOLS.out.cram_crai
-    // Remove no longer necessary field: num_intervals
-    .map{ meta, cram, crai -> [ meta - meta.subMap('num_intervals'), cram, crai ] }
+        // Merge and index the splitncigar cram files
+        CRAM_MERGE_INDEX_SAMTOOLS(cram_to_merge, fasta, fasta_fai)
+
+        cram_sncr = CRAM_MERGE_INDEX_SAMTOOLS.out.cram_crai
+        // Remove no longer necessary field: num_intervals
+        .map{ meta, cram, crai -> [ meta - meta.subMap('num_intervals'), cram, crai ] }
+
+    } else {
+
+        cram_sncr = GATK4_SPLITNCIGARREADS.out.cram.join(GATK4_SPLITNCIGARREADS.out.crai, failOnDuplicate: true, failOnMismatch: true)
+
+    }
 
     // Gather versions of all tools used
     versions = versions.mix(GATK4_SPLITNCIGARREADS.out.versions)
@@ -46,6 +55,6 @@ workflow BAM_SPLITNCIGARREADS {
 
 
     emit:
-    cram = cram_recal // channel: [ meta, cram, crai ]
+    cram = cram_sncr // channel: [ meta, cram, crai ]
     versions          // channel: [ versions.yml ]
 }

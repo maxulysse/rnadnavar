@@ -34,10 +34,15 @@ workflow BAM_VARIANT_CALLING_TUMOR_ONLY_ALL {
     vcf_strelka     = Channel.empty()
     vcf_sage        = Channel.empty()
 
+    contamination_table_mutect2 = Channel.empty()
+    segmentation_table_mutect2  = Channel.empty()
+    artifact_priors_mutect2     = Channel.empty()
+
     cram.dump(tag:'tumour_only_cram')
     fasta.dump(tag:'fasta_HERE')
     // SAGE
     if (tools && tools.split(',').contains('sage') || realignment) {
+
         BAM_VARIANT_CALLING_TUMOR_ONLY_SAGE(
             cram,
             dict,
@@ -55,7 +60,7 @@ workflow BAM_VARIANT_CALLING_TUMOR_ONLY_ALL {
         BAM_VARIANT_CALLING_SINGLE_STRELKA(
             cram,
             dict,
-            fasta.map{ meta, fasta -> [ fasta ] },
+            fasta.map{ meta, fasta ->  fasta  },
             fasta_fai,
             intervals_bed_gz_tbi,
             no_intervals

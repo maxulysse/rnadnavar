@@ -30,6 +30,16 @@ workflow BAM_VARIANT_CALLING_TUMOR_ONLY_MUTECT2 {
     main:
     versions = Channel.empty()
 
+    // Initialize empty channel: Contamination calculation is run on pileup table, pileup is not run if germline resource is not provided
+    calculatecontamination_out_seg = Channel.empty()
+    calculatecontamination_out_cont = Channel.empty()
+    artifact_priors              = Channel.empty()
+    ch_cont_to_filtermutectcalls = Channel.empty()
+    ch_seg_to_filtermutectcalls  = Channel.empty()
+    pileup_table_normal          = Channel.empty()
+    pileup_table_tumor           = Channel.empty()
+    pileup_table                 = Channel.empty()
+
     // If no germline resource is provided, then create an empty channel to avoid GetPileupsummaries from being run
     germline_resource_pileup     = germline_resource_tbi ? germline_resource : Channel.empty()
     germline_resource_pileup_tbi = germline_resource_tbi ?: Channel.empty()
@@ -103,6 +113,8 @@ workflow BAM_VARIANT_CALLING_TUMOR_ONLY_MUTECT2 {
         // Generate artifactpriors using learnreadorientationmodel on the f1r2 output of mutect2
         LEARNREADORIENTATIONMODEL(f1r2)
 
+        artifact_priors = LEARNREADORIENTATIONMODEL.out.artifactprior
+
         pileup_input = input_intervals.map{ meta, cram, crai, intervals -> [ meta + [ id:meta.sample ], cram, crai, intervals] }.unique()
 
         // Generate pileup summary table using getepileupsummaries
@@ -125,9 +137,6 @@ workflow BAM_VARIANT_CALLING_TUMOR_ONLY_MUTECT2 {
         // Contamination and segmentation tables created using calculatecontamination on the pileup summary table
         CALCULATECONTAMINATION(pileup_table.map{ meta, table -> [ meta, table, [] ] })
 
-        // Initialize empty channel: Contamination calculation is run on pileup table, pileup is not run if germline resource is not provided
-        calculatecontamination_out_seg = Channel.empty()
-        calculatecontamination_out_cont = Channel.empty()
 
         if (joint_mutect2) {
             // Group tables by samples
@@ -141,36 +150,32 @@ workflow BAM_VARIANT_CALLING_TUMOR_ONLY_MUTECT2 {
         // Mutect2 calls filtered by filtermutectcalls using the contamination and segmentation tables
         vcf_to_filter = vcf.join(tbi, failOnDuplicate: true, failOnMismatch: true)
                             .join(stats, failOnDuplicate: true, failOnMismatch: true)
-                            .join(LEARNREADORIENTATIONMODEL.out.artifactprior, failOnDuplicate: true, failOnMismatch: true)
+                            .join(artifact_priors, failOnDuplicate: true, failOnMismatch: true)
                             .join(calculatecontamination_out_seg)
                             .join(calculatecontamination_out_cont)
                         .map{ meta, vcf, tbi, stats, artifactprior, seg, cont -> [ meta, vcf, tbi, stats, artifactprior, seg, cont, [] ] }
+
+        versions = versions.mix(MERGE_MUTECT2.out.versions)
+        versions = versions.mix(CALCULATECONTAMINATION.out.versions)
+        versions = versions.mix(GETPILEUPSUMMARIES.out.versions)
+        versions = versions.mix(GATHERPILEUPSUMMARIES.out.versions)
+        versions = versions.mix(LEARNREADORIENTATIONMODEL.out.versions)
+        versions = versions.mix(MERGEMUTECTSTATS.out.versions)
+        versions = versions.mix(MUTECT2.out.versions)
     } else {
         vcf_to_filter = vcf.join(tbi, failOnDuplicate: true, failOnMismatch: true)
                             .join(stats, failOnDuplicate: true, failOnMismatch: true)
                             .map{ meta, vcf, tbi, stats -> [ meta, vcf, tbi, stats, [], [], [], [] ] }
         // TODO: when realignment, can we reuse artifact_priors, calculate contamination and learnorientation?
-        artifact_priors              = Channel.empty()
-        ch_cont_to_filtermutectcalls = Channel.empty()
-        ch_seg_to_filtermutectcalls  = Channel.empty()
-        pileup_table_normal          = Channel.empty()
-        pileup_table_tumor           = Channel.empty()
 
     }
     FILTERMUTECTCALLS(vcf_to_filter, fasta, fai, dict)
+    versions = versions.mix(FILTERMUTECTCALLS.out.versions)
 
     vcf_filtered = FILTERMUTECTCALLS.out.vcf
         // add variantcaller to meta map and remove no longer necessary field: num_intervals
         .map{ meta, vcf -> [ meta + [ variantcaller:'mutect2' ], vcf ] }
 
-    versions = versions.mix(MERGE_MUTECT2.out.versions)
-    versions = versions.mix(CALCULATECONTAMINATION.out.versions)
-    versions = versions.mix(FILTERMUTECTCALLS.out.versions)
-    versions = versions.mix(GETPILEUPSUMMARIES.out.versions)
-    versions = versions.mix(GATHERPILEUPSUMMARIES.out.versions)
-    versions = versions.mix(LEARNREADORIENTATIONMODEL.out.versions)
-    versions = versions.mix(MERGEMUTECTSTATS.out.versions)
-    versions = versions.mix(MUTECT2.out.versions)
 
     emit:
     vcf   // channel: [ meta, vcf ]
@@ -180,9 +185,9 @@ workflow BAM_VARIANT_CALLING_TUMOR_ONLY_MUTECT2 {
     index_filtered = FILTERMUTECTCALLS.out.tbi   // channel: [ meta, tbi ]
     stats_filtered = FILTERMUTECTCALLS.out.stats // channel: [ meta, stats ]
 
-    artifact_priors = LEARNREADORIENTATIONMODEL.out.artifactprior    // channel: [ meta, artifactprior ]
+    artifact_priors = artifact_priors    // channel: [ meta, artifactprior ]
 
-    pileup_table  // channel: [ meta, table ]
+    pileup_table    = pileup_table  // channel: [ meta, table ]
 
     contamination_table = calculatecontamination_out_cont  // channel: [ meta, contamination ]
     segmentation_table  = calculatecontamination_out_seg   // channel: [ meta, segmentation ]

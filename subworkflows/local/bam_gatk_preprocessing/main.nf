@@ -171,6 +171,12 @@ workflow BAM_GATK_PREPROCESSING {
             versions = versions.mix(BAM_SPLITNCIGARREADS.out.versions)
 
             cram_skip_splitncigar = Channel.empty()
+
+            // CSV should be written for the file actually out, either CRAM or BAM
+            // Create CSV to restart from this step
+            csv_subfolder = 'splitncigarreads'
+            CHANNEL_SPLITNCIGARREADS_CREATE_CSV(cram_splitncigar_no_spark, csv_subfolder, params.outdir, false)
+
         }
 
         // cram_splitncigar_no_spark contains crams from splitncigar or markduplicates if applicable

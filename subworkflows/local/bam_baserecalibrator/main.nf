@@ -29,11 +29,12 @@ workflow BAM_BASERECALIBRATOR {
     GATK4_BASERECALIBRATOR(cram_intervals, fasta, fasta_fai, dict.map{ meta, it -> [ it ] }, known_sites, known_sites_tbi)
 
     // Figuring out if there is one or more table(s) from the same sample
-    table_to_merge = GATK4_BASERECALIBRATOR.out.table.map{ meta, table -> [ groupKey(meta, meta.num_intervals), table ] }.groupTuple().branch{
+    table_to_merge = GATK4_BASERECALIBRATOR.out.table.map{ meta, table -> [ groupKey(meta, meta.num_intervals), table ] }.groupTuple()
+        .branch{
         // Use meta.num_intervals to asses number of intervals
         single:   it[0].num_intervals <= 1
         multiple: it[0].num_intervals > 1
-    }
+        }
 
     // Only when using intervals
     GATK4_GATHERBQSRREPORTS(table_to_merge.multiple)
