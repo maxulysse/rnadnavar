@@ -2,10 +2,10 @@ process MAF2BED {
     tag "$meta.id"
     label 'process_single'
 
-    conda "anaconda::pandas=1.4.3"
+    conda "${moduleDir}/environment.yml"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://depot.galaxyproject.org/singularity/pandas:1.4.3' :
-        'biocontainers/pandas:1.4.3' }"
+        'https://depot.galaxyproject.org/singularity/pigz:2.3.4' :
+        'biocontainers/pigz:2.3.4' }"
 
     input:
     tuple val(meta), path(maf)
@@ -22,12 +22,25 @@ process MAF2BED {
     def prefix = task.ext.prefix ?: "${meta.id}"
 
     """
-#!/usr/bin/env python
-import subprocess
-import pandas as pd
-maf = pd.read_csv("${maf}", sep="\\t", comment="#")
-bed = maf[["Chromosome", "Start_Position", "End_Position"]]
-bed.to_csv("${prefix}.bed", sep="\\t", index=False, header=False)
-subprocess.check_call('cat <<-END_VERSIONS > versions.yml\\n\\"${task.process}\\":\\n\tpython: \$(echo \$(python --version 2>&1) | sed \\"s/^.*Python (//;s/).*//\\")\\nEND_VERSIONS', shell=True)
+    #!/usr/bin/env bash
+    awk 'BEGIN {
+        FS=OFS="\t";
+        header=1;
+    }
+    NR==1 {
+        for (i=1; i<=NF; i++) {
+            if (\$i == "Chromosome") chrom_col = i;
+            if (\$i == "Start_Position") start_col = i;
+            if (\$i == "End_Position") end_col = i;
+        }
+        next;
+    }
+    !/^#/ {
+        print \$chrom_col, \$start_col, \$end_col;
+    }' ${maf} > ${prefix}.bed
+    cat <<-END_VERSIONS > versions.yml
+    "${task.process}":
+        awk: \$( awk --version 2>&1 | head -n 1 )
+    END_VERSIONS
     """
 }
