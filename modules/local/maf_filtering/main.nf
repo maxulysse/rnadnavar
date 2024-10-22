@@ -8,7 +8,7 @@ process MAF_FILTERING {
         'biocontainers/mulled-v2-629aec3ba267b06a1efc3ec454c0f09e134f6ee2:3b083bb5eae6e491b8579589b070fa29afbea2a1-0' }"
 
     input:
-    tuple val(meta), path(maf), val(caller)
+    tuple val(meta), path(maf), path(intervals)
     tuple val(meta2), path(fasta)
 
     output:
@@ -23,7 +23,19 @@ process MAF_FILTERING {
     def prefix = task.ext.prefix ?: "${meta.id}"
 
     """
-    filter_mutations.py -i $maf --output ${prefix}.maf --ref $fasta $args
+    if [ -n "${intervals}" ]; then
+        INTER=\$(awk '{print \$1 ":" \$2 "-" \$3}' ${intervals})
+        interval="--interval \$INTER"
+        chrom=\$(cut -f1 ${intervals} | tr "\\n" "|")
+        maf=${maf}.reduced
+        # This is to reduce input reading time in python in case maf is big
+        grep -Ew "\${chrom}Hugo_Symbol" ${maf} > \$maf
+        echo 'Reduced maf to intervals: \${chrom}'
+    else
+        interval=""
+        maf=${maf}
+    fi
+    filter_mutations.py -i \$maf --output ${prefix}.maf --ref $fasta $args \$interval
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         python: \$(echo \$(python --version 2>&1) | sed 's/^.*Python (//;s/).*//')
