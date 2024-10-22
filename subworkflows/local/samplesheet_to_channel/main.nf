@@ -57,8 +57,10 @@ workflow  SAMPLESHEET_TO_CHANNEL{
                         error("Combination error")}
                 } else if (meta.status >= 1){
                     if (meta.normal_id == null){
-                        error("When tool 'realigment' enabled, `normal_id` should be added to the csv for maf files.")
+                        WarningLogger.warnOnce("When tool 'realigment' enabled, `normal_id` should be added to the csv for maf files if matched normal.")
                         // Need to get the normal id to create the tumour_vs_normal id
+                        meta = meta + [id: meta.sample, data_type: 'maf', variantcaller: variantcaller ?: '']
+                        return [ meta, maf ]
                     } else {
                         meta = meta + [id: meta.sample + "_vs_" + meta.normal_id, data_type: 'maf', variantcaller: variantcaller ?: '']
                         return [ meta, maf ]
@@ -95,7 +97,7 @@ workflow  SAMPLESHEET_TO_CHANNEL{
 
                 error("Step is `$params.step` but samplesheet has no recalibration table. Please check your samplesheet or adjust the step parameter.\nhttps://nf-co.re/rnadnavar/usage#input-samplesheet-configurations")
 
-            }else if (table && bam) {
+            } else if (table && bam) {
                 meta = meta + [id: meta.sample, data_type: 'bam']
 
                 if (!(params.step == 'mapping' || params.step == 'annotate')) return [ meta - meta.subMap('lane'), bam, bai, table ]
@@ -140,6 +142,20 @@ workflow  SAMPLESHEET_TO_CHANNEL{
                 else {
                     error("Samplesheet contains vcf files but step is `$params.step`. Please check your samplesheet or adjust the step parameter.\nhttps://nf-co.re/rnadnavar/usage#input-samplesheet-configurations")
                 }
+            } else if (maf) {
+                if (meta.status >= 1){
+                    if (meta.normal_id == null){
+                        WarningLogger.warnOnce("When tool 'realigment' enabled, `normal_id` should be added to the csv for maf files if matched normal.")
+                        // Need to get the normal id to create the tumour_vs_normal id
+                        meta = meta + [id: meta.sample, data_type: 'maf', variantcaller: variantcaller ?: '']
+                        return [ meta, maf ]
+                    } else {
+                        meta = meta + [id: meta.sample + "_vs_" + meta.normal_id, data_type: 'maf', variantcaller: variantcaller ?: '']
+                        return [ meta, maf ]
+                    }
+                } else {
+                    error("MAF cannot be status == 0 (normal). Germline mode not supported.")
+                }
             } else {
                 error("Missing or unknown field in csv file header. Please check your samplesheet")
             }
@@ -169,7 +185,7 @@ workflow  SAMPLESHEET_TO_CHANNEL{
                 if (params.tools.split(',').contains(tool_requiring_normal_samples)) requested_tools_requiring_normal_samples.add(tool_requiring_normal_samples)
             }
             if (!requested_tools_requiring_normal_samples.isEmpty()) {
-                log.warn('The sample-sheet only contains tumor-samples, but the following tools, which were requested by the option "--tools", work better with a matched normal-sample: ' + requested_tools_requiring_normal_samples.join(", "))
+                WarningLogger.warnOnce('The sample-sheet only contains tumor-samples, but the following tools, which were requested by the option "--tools", work better with a matched normal-sample: ' + requested_tools_requiring_normal_samples.join(", "))
             }
         }
     }
@@ -177,24 +193,24 @@ workflow  SAMPLESHEET_TO_CHANNEL{
     // Fails when wrongfull extension for intervals file
     if (params.wes && !params.step == 'annotate') {
         if (params.intervals && !params.intervals.endsWith("bed"))  error("Target file specified with `--intervals` must be in BED format for targeted data")
-        else log.warn("Intervals file was provided without parameter `--wes`: Pipeline will assume this is Whole-Genome-Sequencing data.")
+        else WarningLogger.warnOnce("Intervals file was provided without parameter `--wes`: Pipeline will assume this is Whole-Genome-Sequencing data.")
     } else if (params.intervals && !params.intervals.endsWith("bed") && !params.intervals.endsWith("list")) error("Intervals file must end with .bed, .list, or .interval_list")
 
     if (params.step == 'mapping' && params.aligner.contains("dragmap") && !(params.skip_tools && params.skip_tools.split(',').contains("baserecalibrator"))) {
-        log.warn("DragMap was specified as aligner. Base recalibration is not contained in --skip_tools. It is recommended to skip baserecalibration when using DragMap\nhttps://gatk.broadinstitute.org/hc/en-us/articles/4407897446939--How-to-Run-germline-single-sample-short-variant-discovery-in-DRAGEN-mode")
+        WarningLogger.warnOnce("DragMap was specified as aligner. Base recalibration is not contained in --skip_tools. It is recommended to skip baserecalibration when using DragMap\nhttps://gatk.broadinstitute.org/hc/en-us/articles/4407897446939--How-to-Run-germline-single-sample-short-variant-discovery-in-DRAGEN-mode")
     }
 
 
     // Warns when missing files or params for mutect2
     if (params.tools && params.tools.split(',').contains('mutect2')) {
         if (!params.pon) {
-            log.warn("No Panel-of-normal was specified for Mutect2.\nIt is highly recommended to use one: https://gatk.broadinstitute.org/hc/en-us/articles/5358911630107-Mutect2\nFor more information on how to create one: https://gatk.broadinstitute.org/hc/en-us/articles/5358921041947-CreateSomaticPanelOfNormals-BETA-")
+            WarningLogger.warnOnce("No Panel-of-normal was specified for Mutect2.\nIt is highly recommended to use one: https://gatk.broadinstitute.org/hc/en-us/articles/5358911630107-Mutect2\nFor more information on how to create one: https://gatk.broadinstitute.org/hc/en-us/articles/5358921041947-CreateSomaticPanelOfNormals-BETA-")
         }
         if (!params.germline_resource) {
-            log.warn("If Mutect2 is specified without a germline resource, no filtering will be done.\nIt is recommended to use one: https://gatk.broadinstitute.org/hc/en-us/articles/5358911630107-Mutect2")
+            WarningLogger.warnOnce("If Mutect2 is specified without a germline resource, no filtering will be done.\nIt is recommended to use one: https://gatk.broadinstitute.org/hc/en-us/articles/5358911630107-Mutect2")
         }
         if (params.pon && params.pon.contains("/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/1000g_pon.hg38.vcf.gz")) {
-            log.warn("The default Panel-of-Normals provided by GATK is used for Mutect2.\nIt is highly recommended to generate one from normal samples that are technical similar to the tumor ones.\nFor more information: https://gatk.broadinstitute.org/hc/en-us/articles/360035890631-Panel-of-Normals-PON-")
+            WarningLogger.warnOnce("The default Panel-of-Normals provided by GATK is used for Mutect2.\nIt is highly recommended to generate one from normal samples that are technical similar to the tumor ones.\nFor more information: https://gatk.broadinstitute.org/hc/en-us/articles/360035890631-Panel-of-Normals-PON-")
         }
     }
 
@@ -250,4 +266,17 @@ def flowcellLaneFromFastq(path) {
         fcid = fields[0]
     }
     return fcid
+}
+
+class WarningLogger {
+    // A set to store unique warning messages that have been logged
+    static Set<String> loggedWarnings = new HashSet<>()
+
+    // Method to log a warning only once
+    static void warnOnce(String message) {
+        if (!loggedWarnings.contains(message)) {
+            log.warn(message)
+            loggedWarnings.add(message)
+        }
+    }
 }
