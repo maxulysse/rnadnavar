@@ -30,6 +30,8 @@ def argparser():
     parser.add_argument("--rnaedits", help="BED file(s) with known RNA editing events separated by space", nargs="+", default=[])
     parser.add_argument("--thr", default=-2.8)
     parser.add_argument("--chain", help="Chain file")
+    parser.add_argument("--intervals", help="Perform filtering in specific interval chrom:start-end", nargs='+', default=[])
+
 
     return parser.parse_args()
 
@@ -92,6 +94,8 @@ def add_filters(maf, rnaeditingsites, realignment, whitelist):
         if whitelist:
             if not ravex_filter or row["whitelist"]:
                 ravex_filter = ["PASS"]
+        if not ravex_filter:
+            ravex_filter == ["PASS"]
         ravex_filter = ";".join(ravex_filter)
         maf.at[idx, "RaVeX_FILTER"] = ravex_filter
     return maf
@@ -199,6 +203,32 @@ def check_rnaediting(rnaedits):
     rnadbs_concat = pd.concat(rnadbs)
     return rnadbs_concat
 
+def read_maf(maf_file, intervals, mafout_file):
+    print(f'Reading file(s): {maf_file}')
+    maf = pd.read_csv(maf_file, sep="\t", comment="#", low_memory=False)
+    if intervals:
+        interval_maf = []
+        for region in intervals:
+            print(f' - Extracting interval: {region}')
+            try:
+                chrom_coords = region.split(':')
+                coords = chrom_coords[1].split('-')
+                chrom = chrom_coords[0]
+                start = int(coords[0])
+                end = int(coords[1])
+            except IndexError:
+                print('[ERROR] Are the intervals in the right coordinates? chrom:start-end ?')
+                exit(1)
+            interval_maf += [maf[(maf['Chromosome']==chrom) & (maf["Start_Position"].between(start, end, inclusive="both"))]]
+        maf = pd.concat(interval_maf)
+        if maf.empty:
+            print('[WARNING] No variants found, writing empty MAF')
+            new_cols = ["pon_score_null", "pon_thr_null", "realignment", "rnaediting"]
+            maf = pd.DataFrame(columns=list(maf.columns) + new_cols)
+            maf.to_csv(mafout_file, index=False, header=True, sep="\t")
+            exit()
+    return maf
+
 def main():
     args = argparser()
     print("- Running script")
@@ -209,11 +239,11 @@ def main():
     chroms = [f"chr{x}" for x in list(range(1, 23)) + ["X", "Y"]]
 
     # realignment
-    calls_1pass = pd.read_csv(args.maf, sep="\t", comment="#", low_memory=False)
+    calls_1pass = read_maf(maf_file=args.maf, intervals=args.intervals, mafout_file=args.output)
     # If REALIGNMENT provide intersect
     if args.maf_realign and args.maf != args.maf_realign:
         didrealignment = True
-        calls_2pass = pd.read_csv(args.maf_realign, sep="\t", comment="#",low_memory=False)
+        calls_2pass = read_maf(maf_file=args.maf_realign, intervals=args.intervals, mafout_file=args.output)
         calls1, calls2, calls12 = realignment(calls_1pass, calls_2pass)
         calls = [calls1, calls2, calls12]
     else:

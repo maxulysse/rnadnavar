@@ -21,6 +21,7 @@ def argparser():
     parser.add_argument("--whitelist", help="BED file with variants to keep (CHROM POS REF ALT)")
     parser.add_argument("--blacklist", help="BED file with regions to remove (CHROM START END)")
     parser.add_argument("--filters", help="Other filters to be considered as PASS", default=["PASS"], nargs="+")
+    parser.add_argument("--intervals", help="Perform filtering in specific interval chrom:start-end", nargs='+', default=[])
     parser.add_argument("--ref", help="FASTA reference file to extract context")
     parser.add_argument("--vc_priority", help="The order of priority will mark which caller annotation will be kept. Only one annotation is kept per sample and per caller.",
                         default=["mutect2", "sage", "strelka", "consensus"], nargs="+")
@@ -64,7 +65,8 @@ def read_blacklist_bed(bed_file):
     return bed
 
 
-def read_maf(maf_file):
+def read_maf(maf_file, intervals, mafout_file):
+    print(f'Reading file(s): {maf_file}')
     if type(maf_file) == type([]):
         maf_list = []
         for m in maf_file:
@@ -72,6 +74,29 @@ def read_maf(maf_file):
         maf = pd.concat(maf_list)
     else:
         maf = pd.read_csv(maf_file, sep="\t", comment="#", low_memory=False)
+    if intervals:
+        interval_maf = []
+        for region in intervals:
+            print(f' - Extracting interval: {region}')
+            try:
+                chrom_coords = region.split(':')
+                coords = chrom_coords[1].split('-')
+                chrom = chrom_coords[0]
+                start = int(coords[0])
+                end = int(coords[1])
+            except IndexError:
+                print('[ERROR] Are the intervals in the right coordinates? chrom:start-end ?')
+                exit(1)
+            interval_maf += [maf[(maf['Chromosome']==chrom) & (maf["Start_Position"].between(start, end, inclusive="both"))]]
+        maf = pd.concat(interval_maf)
+        if maf.empty:
+            print('[WARNING] No variants found, writing empty MAF')
+            new_cols = ["DNAchange", "whitelist", "blacklist", "blk_reason",
+                        "ingnomAD", "noncoding", "ig_pseudo", "CONTEXT",
+                        "homopolymer", "RaVeX_FILTER", "Tumor_Sample_Barcode_consensus"]
+            maf = pd.DataFrame(columns=list(maf.columns) + new_cols)
+            maf.to_csv(mafout_file, index=False, header=True, sep="\t")
+            exit()
     if "DNAchange" not in maf.columns:
         maf["DNAchange"] = (
             maf["Chromosome"].map(str)
@@ -245,7 +270,7 @@ def add_ravex_filters(
         if not ig_pseudo:
             if row["ig_pseudo"]:
                 ravex_filter += ["ig_pseudo"]
-        if not row["isconsensus"]:  # of there is consensus we take the FILTER from the consensus
+        if not row["isconsensus"]:  # if there is consensus we take the FILTER from the consensus
             if not row["FILTER"] in filters:
                 ravex_filter += ["vc_filter"]
             if not ignore_consensus:
@@ -256,12 +281,13 @@ def add_ravex_filters(
         else:
             if not row["FILTER"] in filters:
                 ravex_filter += ["vc_filter"]
+        if row["ingnomAD"]:
+            ravex_filter += ["gnomad"]
         if whitelist:
             if not ravex_filter or row["whitelist"]:
                 ravex_filter = ["PASS"]
-        else:
-            if not ravex_filter:
-                ravex_filter = ["PASS"]
+        if not ravex_filter or ravex_filter == "":
+            ravex_filter = ["PASS"]
         ravex_filter = ";".join(ravex_filter)
         maf.at[idx, "RaVeX_FILTER"] = ravex_filter
     return maf
@@ -274,7 +300,7 @@ def merge_rows(group):
     # Merge the 'callers' column
     merged_row['callers'] = group['callers'].iloc[0] + "|" + group['Caller'].iloc[1] if len(group) > 1 else group['callers'].iloc[0]
     # Merge the 'filters' column
-    merged_row['filters'] = group['filters'].iloc[0] + "|" +  group['FILTER_consensus'].iloc[1] if len(group) > 1 else group['callers'].iloc[0]
+    merged_row['filters'] = group['filters'].iloc[0] + "|" +  group['FILTER_consensus'].iloc[1] if len(group) > 1 else group['filters'].iloc[0]
     # Set the Tumor_Sample_Barcode_consensus column
     merged_row['Tumor_Sample_Barcode_consensus'] = group['Tumor_Sample_Barcode'].iloc[1] if len(group) > 1 else None
 
@@ -329,7 +355,7 @@ def main():
         "RNA",
     ]
     args = argparser()
-    maf = read_maf(args.input)
+    maf = read_maf(args.input, args.intervals, args.output)
     whitelist = False
     blacklist = False
     if args.whitelist:
