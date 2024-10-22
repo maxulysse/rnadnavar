@@ -29,7 +29,6 @@ workflow BAM_VARIANT_CALLING_SINGLE_STRELKA {
         cram_intervals = cram.combine(intervals)
         // Move num_intervals to meta map
         .map{ meta, tumor_cram, tumor_crai, intervals_gz_tbi, num_intervals -> [ meta + [ num_intervals:num_intervals ], tumor_cram, tumor_crai, intervals_gz_tbi[0], intervals_gz_tbi[1] ] }
-        .map{ meta, cram, crai, intervals, intervals_index, num_intervals -> [ meta + [ num_intervals:num_intervals ], cram, crai, intervals, intervals_index ] }
     }
     cram_intervals.dump(tag:'strelka_cram_AFTER')
     STRELKA_SINGLE(cram_intervals, fasta, fasta_fai)
