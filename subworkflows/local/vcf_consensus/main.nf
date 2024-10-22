@@ -58,7 +58,7 @@ workflow VCF_CONSENSUS {
                                     def ncallers   = toolsllist.count('sage') +
                                                     toolsllist.count('strelka') +
                                                     toolsllist.count('mutect2')
-                                    key = groupKey(meta.subMap('id', 'patient', 'status') +
+                                    key = groupKey(meta.subMap('id', 'patient', 'status','original_sample_id') +
                                                 [ncallers : ncallers], ncallers)
                                     [key, maf, meta.variantcaller]}
                                     .groupTuple()
@@ -186,6 +186,7 @@ workflow VCF_CONSENSUS {
                                                 meta.rna_id  = rna[1].id
                                                 meta.status  = dna[1].status
                                                 meta.id      = "${meta.dna_id}_with_${meta.rna_id}".toString()
+                                                meta.original_sample_id = meta.original_sample_id
                                                 [meta, dna[2] + rna[2], dna[3] + rna[3]]
                                             }
             mafs_rna_crossed_with_dna_rescue = mafs_status_rna_to_cross
@@ -197,6 +198,7 @@ workflow VCF_CONSENSUS {
                                                 meta.dna_id  = dna[1].id
                                                 meta.status  = rna[1].status
                                                 meta.id      = "${meta.rna_id}_with_${meta.dna_id}".toString()
+                                                meta.original_sample_id = meta.original_sample_id
                                                 [meta, rna[2] + dna[2], rna[3] + dna[3]]
                                             }
 

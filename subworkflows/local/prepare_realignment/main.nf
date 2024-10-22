@@ -1,5 +1,5 @@
 //
-// PREPARE SECOND RUN: extract reads from candidate regions for re-alignment (RNA and DNA normal only)
+// PREPARE REALIGNMENT: extract reads from candidate regions for re-alignment (RNA and DNA normal only)
 //
 include { MAF2BED                                      } from '../../../modules/local/maf2bed/main'
 // Extract read ids for selected regions
@@ -72,10 +72,12 @@ workflow BAM_EXTRACT_READS_HISAT2_ALIGN {
                 maf_with_candidates_tumor = maf_with_candidates_branch.realign.map { meta, maf ->
                                                                                         def base_id = meta.id.contains('_vs_') ? meta.id.split('_vs_')[0].split('_with_')[0] : meta.id.split('_with_')[0]
                                                                                         def sample_id = base_id + "_realign"
+                                                                                        def original_sample_id = base_id
                                                                                         [
                                                                                             [
                                                                                                 patient: meta.patient,
                                                                                                 sample:  sample_id,
+                                                                                                original_sample_id: original_sample_id,
                                                                                                 status:  meta.status,
                                                                                                 id:      sample_id
                                                                                             ], maf
@@ -84,10 +86,12 @@ workflow BAM_EXTRACT_READS_HISAT2_ALIGN {
                 maf_with_candidates_normal = maf_with_candidates_branch.realign.map{ meta, maf ->
                                                                                         def base_id = meta.id.contains('_vs_') ? meta.id.split('_vs_')[1].split('_with_')[0] : meta.id.split('_with_')[0]
                                                                                         def sample_id = base_id + "_realign"
+                                                                                        def original_sample_id = base_id
                                                                                         [
                                                                                             [
                                                                                                 patient: meta.patient,
                                                                                                 sample:  sample_id,
+                                                                                                original_sample_id: original_sample_id,
                                                                                                 status:  0,
                                                                                                 id:      sample_id
                                                                                             ], maf
@@ -98,6 +102,7 @@ workflow BAM_EXTRACT_READS_HISAT2_ALIGN {
                                         [[patient: meta.patient,
                                         sample:  meta.id + "_realign",
                                         status:  meta.status,
+                                        original_sample_id: meta.id,
                                         id:      meta.id + "_realign"], cram, crai]
                                         }
                 reads_to_realign_and_join.dump(tag:'reads_to_realign1')
