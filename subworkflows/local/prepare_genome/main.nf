@@ -39,6 +39,15 @@ workflow PREPARE_GENOME {
 
     main:
 
+    bwa        = Channel.empty()
+    bwamem2    = Channel.empty()
+    hashtable  = Channel.empty()
+
+    ch_star_index   = Channel.empty()
+    ch_gtf          = Channel.empty()
+    ch_hisat2_index = Channel.empty()
+    ch_splicesites  = Channel.value([])
+    ch_exon_bed     = Channel.empty()
 
     versions = Channel.empty()
 
@@ -66,11 +75,6 @@ workflow PREPARE_GENOME {
         versions = versions.mix(BWAMEM2_INDEX.out.versions)
         versions = versions.mix(DRAGMAP_HASHTABLE.out.versions)
 
-    } else {
-
-        bwa        = Channel.empty()
-        bwamem2    = Channel.empty()
-        hashtable  = Channel.empty()
     }
 
     GATK4_CREATESEQUENCEDICTIONARY(fasta)
@@ -88,9 +92,10 @@ workflow PREPARE_GENOME {
     TABIX_PON(pon.flatten().map{ it -> [ [ id:it.baseName ], it ] })
 
     //
-    // Uncompress GTF annotation file or create from GFF3 if required
+    // Uncompress GTF annotation file or create from GFF3 if required.
+    // Necessary for STAR (mapping) and HISAT2 (realignment)
     //
-    if (params.rna & params.step == 'mapping'){
+    if ((params.rna & params.step == 'mapping') || (params.tools && params.tools.split(',').contains("realignment"))){
         ch_gffread_version = Channel.empty()
         if (params.gtf) {
             if (params.gtf.endsWith('.gz')) {
@@ -121,7 +126,11 @@ workflow PREPARE_GENOME {
 
             versions = versions.mix(GFFREAD.out.versions)
         }
-
+    }
+    //
+    // STAR INDEX if rna and mapping step
+    //
+    if (params.rna & params.step == 'mapping'){
         //
         // Uncompress STAR index or generate from scratch if required
         //
@@ -141,39 +150,33 @@ workflow PREPARE_GENOME {
             ch_star_index = STAR_GENOMEGENERATE.out.index
             versions      = versions.mix(STAR_GENOMEGENERATE.out.versions)
         }
+    }
+    // HISAT2 not necessary if second pass skipped
+    ch_gtf.dump(tag:"GTF")
+    if ((params.tools && params.tools.split(',').contains("realignment"))){
+        if (params.splicesites) {
+            ch_splicesites  = Channel.fromPath(params.splicesites).collect().map{ it -> [ [ id:'null' ], it ]}
+        } else{
+            HISAT2_EXTRACTSPLICESITES ( ch_gtf )
+            ch_splicesites  = HISAT2_EXTRACTSPLICESITES.out.txt
+            versions = versions.mix(HISAT2_EXTRACTSPLICESITES.out.versions)
+        }
 
+        if (params.hisat2_index) {
+            ch_hisat2_index  = Channel.fromPath(params.hisat2_index).collect().map{it -> [ [ id:"hisat2_index" ], it ]}
+        } else{
 
-        // HISAT2 not necessary if second pass skipped
-        if ((params.tools && params.tools.split(',').contains("realignment"))){
-            if (params.splicesites) {
-                ch_splicesites  = Channel.fromPath(params.splicesites).collect().map{ it -> [ [ id:'null' ], it ]}
-            } else{
-                HISAT2_EXTRACTSPLICESITES ( ch_gtf )
-                ch_splicesites  = HISAT2_EXTRACTSPLICESITES.out.txt
-                versions = versions.mix(HISAT2_EXTRACTSPLICESITES.out.versions)
-            }
-
-            if (params.hisat2_index) {
-                ch_hisat2_index  = Channel.fromPath(params.hisat2_index).collect().map{it -> [ [ id:"hisat2_index" ], it ]}
-            } else{
-                HISAT2_BUILD (
-                                fasta,
-                                ch_gtf,
-                                ch_splicesites
-                            )
-                ch_hisat2_index = HISAT2_BUILD.out.index
-                versions = versions.mix(HISAT2_BUILD.out.versions)
-            }
-        } else {
-            ch_hisat2_index = []
-            ch_splicesites  = []
+            HISAT2_BUILD (
+                            fasta,
+                            ch_gtf,
+                            ch_splicesites
+                        )
+            ch_hisat2_index = HISAT2_BUILD.out.index
+            versions = versions.mix(HISAT2_BUILD.out.versions)
         }
     } else {
-        ch_star_index   = Channel.empty()
-        ch_gtf          = Channel.empty()
-        ch_hisat2_index = Channel.empty()
-        ch_splicesites  = Channel.value([])
-        ch_exon_bed     = Channel.empty()
+        ch_hisat2_index = []
+        ch_splicesites  = []
     }
 
 

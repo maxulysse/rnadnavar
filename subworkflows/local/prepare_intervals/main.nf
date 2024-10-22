@@ -21,6 +21,12 @@ workflow PREPARE_INTERVALS {
     main:
     versions = Channel.empty()
 
+    intervals_combined   = Channel.empty()
+    intervals_bed        = Channel.empty()
+    intervals_bed_gz_tbi = Channel.empty()
+    intervals_bed_gz_tbi_combined = Channel.empty()
+    intervals_bed_gz_tbi_and_num_intervals = Channel.empty()
+
 
     if (no_intervals) {
         intervals_bed                          = Channel.of([[], 0 ])
@@ -28,7 +34,8 @@ workflow PREPARE_INTERVALS {
         intervals_combined                     = Channel.of([[id:"no_intervals"], 0 ])
         intervals_bed_gz_tbi_combined          = Channel.of([[], []])
         intervals_bed_gz_tbi_and_num_intervals = Channel.of([[],[], 0 ])
-    } else if (params.step != 'annotate') {
+        // do intervals if beyong annotate step. Filtering, consensus and rna filtering can be splitted by intervals too
+    } else if (params.step != 'annotate' || (params.tools && (params.tools.split(',').contains('filtering') || params.tools.split(',').contains('consensus') || params.tools.split(',').contains('rna_filt')) )) {
         // If no interval/target file is provided, then generated intervals from FASTA file
         if (!intervals) {
             BUILD_INTERVALS(fasta_fai.map{it -> [ [ id:it.baseName ], it ] })
