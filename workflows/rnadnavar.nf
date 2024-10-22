@@ -182,6 +182,7 @@ workflow RNADNAVAR {
     multiqc_files  = multiqc_files.mix(BAM_PROCESSING.out.reports)
     versions       = versions.mix(BAM_PROCESSING.out.versions)
     if (params.tools && params.tools.split(',').contains('realignment')) {
+        realignment = true
         // fastq will not be split when realignment
         params.split_fastq = 0
         // reset intervals to none (realignment files are small)
@@ -234,6 +235,7 @@ workflow RNADNAVAR {
         realigned_filtered_maf = REALIGNMENT.out.maf
     } else{
         realigned_filtered_maf = Channel.empty()
+        realignment            = false
     }
     filtered_maf.dump(tag:"filtered_maf")
     realigned_filtered_maf.dump(tag:"realigned_filtered_maf")
@@ -246,7 +248,9 @@ workflow RNADNAVAR {
                                         }.rna,
                     fasta,
                     fasta_fai,
-                    input_sample
+                    intervals,
+                    input_sample,
+                    realignment
                     )
     versions = versions.mix(MAF_FILTERING_RNA.out.versions)
 //
