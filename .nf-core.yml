@@ -1,11 +1,9 @@
-bump_version: null
 lint:
   files_exist:
     - conf/modules.config
     - conf/test.config
     - conf/test_full.config
-nf_core_version: 3.0.2
-org_path: null
+nf_core_version: 3.1.0
 repository_type: pipeline
 template:
   author: Raquel Manzano-Garcia
@@ -15,6 +13,4 @@ template:
   name: rnadnavar
   org: nf-core
   outdir: .
-  skip_features: null
   version: 1.0dev
-update: null
