@@ -3,7 +3,7 @@ lint:
     - conf/modules.config
     - conf/test.config
     - conf/test_full.config
-nf_core_version: 3.1.1
+nf_core_version: 3.1.2
 repository_type: pipeline
 template:
   author: Raquel Manzano-Garcia
